@@ -1,11 +1,36 @@
+vpn
+mail
+app
+lk
+my
+files
+ftp
+zbx
+zabbix
+grafana
+sentinel
+sentry
+redash
+elastic
+bus
+auth
+demo
+git
+gitlab
+registry
+docker
+private
 staging
 admin
 dev
 devel
 confluence
+consul
 jira
 www
 test
+kibana
+infra
 m
 qa
 0
@@ -517,7 +542,6 @@ apogee
 apollo
 apollo2
 apolo
-app
 app01
 app02
 app1
@@ -715,7 +739,6 @@ austin
 australia
 austria
 aut
-auth
 auth1
 auth2
 author
@@ -1191,7 +1214,6 @@ bunny
 burn
 burner
 bursa
-bus
 busca
 buscador
 business
@@ -2257,7 +2279,6 @@ delta1
 deluxe
 dem
 demeter
-demo
 demo01
 demo02
 demo03
@@ -2499,7 +2520,6 @@ dnsseed
 dnstest
 do
 doc
-docker
 docs
 doctor
 document
@@ -3160,7 +3180,6 @@ file2
 filemaker
 filemanager
 filer
-files
 files1
 files2
 files3
@@ -3358,7 +3377,6 @@ fsp
 fss
 fst
 ft
-ftp
 ftp_
 ftp-
 ftp-eu
@@ -3541,9 +3559,7 @@ girl
 girls
 gis
 gis2
-git
 github
-gitlab
 gitweb
 give
 giveaway
@@ -4927,7 +4943,6 @@ livestats
 livestream
 livesupport
 lj
-lk
 lkjkui
 ll
 lm
@@ -5108,7 +5123,6 @@ magnitogorsk
 magnolia
 mahara
 maia
-mail
 mail-1
 mail-2
 mail-backup
@@ -5773,7 +5787,6 @@ mx8
 mx9
 mxbackup
 mxs
-my
 my1
 my2
 my3
@@ -7098,7 +7111,6 @@ prism
 prisma
 priv
 privacy
-private
 prm
 pro
 proba
@@ -7443,7 +7455,6 @@ registrar
 registrasi
 registration
 registro
-registry
 regs
 regulus
 rehber
@@ -8066,8 +8077,6 @@ sendy
 senegal
 senior
 sensor
-sentinel
-sentry
 seo
 seoul
 sep
@@ -9823,7 +9832,6 @@ voyeur
 vp
 vpdn
 vpgk
-vpn
 vpn0
 vpn01
 vpn02
@@ -10526,7 +10534,6 @@ z2
 z3
 z3950
 za
-zabbix
 zabbix2
 zags
 zakaz
@@ -10538,7 +10545,6 @@ zazcloud1
 zazcloud2
 zazcloud3
 zb
-zbx
 zc
 zcc
 zcgl
