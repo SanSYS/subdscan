@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	websocket "github.com/gorilla/websocket"
 )
 
 type dnserr struct {
@@ -26,18 +28,73 @@ type cliSettings struct {
 	Domain       string
 	WordlistFile string
 	Threads      int
+	WebPort      int
 }
 
 type semaphore chan bool
 
 var sem semaphore
-var settings cliSettings
 var dnsnames chan string
+var cout chan string
 
 func main() {
-	printme()
-	parseFlags()
+	cout = make(chan string)
 
+	var settings cliSettings
+	parseFlags(&settings)
+
+	printme()
+	fmt.Println("")
+	if settings.Domain != "" {
+		fmt.Printf("Find subdomains for site:\t%s\r\n", settings.Domain)
+	}
+	fmt.Printf("Subdomains dictionary file:\t%s\r\n", settings.WordlistFile)
+	fmt.Printf("Threads:\t%d\r\n", settings.Threads)
+	fmt.Println("")
+
+	if settings.WebPort > 0 {
+		http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+			echo(w, r, cout)
+		})
+
+		http.Handle(
+			"/",
+			http.StripPrefix(
+				"/",
+				http.FileServer(http.Dir("static")),
+			),
+		)
+
+		http.HandleFunc("/scan", func(res http.ResponseWriter, req *http.Request) {
+			scanSetting := cliSettings{}
+			scanSetting.Domain = req.FormValue("domain")
+			scanSetting.Threads, _ = strconv.Atoi(req.FormValue("threads"))
+			scanSetting.WordlistFile = settings.WordlistFile
+
+			go runScan(&scanSetting)
+		})
+
+		addr := flag.String("addr", "127.0.0.1:"+strconv.Itoa(settings.WebPort), "http service address")
+		fmt.Println("Runned Web UI on http://" + *addr)
+		log.Fatal(http.ListenAndServe(*addr, nil))
+	} else {
+		go func() {
+			for {
+				out := <-cout
+
+				if out == "out" {
+					return
+				}
+
+				fmt.Println(out)
+			}
+		}()
+
+		runScan(&settings)
+	}
+}
+
+func runScan(settings *cliSettings) {
 	sem = make(semaphore, 1)
 	dnsnames = make(chan string, settings.Threads)
 	sem <- true
@@ -46,27 +103,29 @@ func main() {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go findByDnsDumpster(&wg, solved)
+	go findByDnsDumpster(&wg, solved, settings)
 
 	wg.Add(1)
-	go findByWordList(&wg, solved)
+	go findByWordList(&wg, solved, settings)
 
 	wg.Wait()
+
+	cout <- "out"
 }
 
 func printme() {
-	fmt.Println()
+	fmt.Println("")
 	fmt.Println("Developed by © SanSYS (https://github.com/SanSYS)")
-	fmt.Println()
+	fmt.Println("")
 }
 
-func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool) {
+func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool, settings *cliSettings) {
 	defer wg.Done()
 
 	resp, httpErr := http.Get("https://dnsdumpster.com")
 
 	if httpErr != nil {
-		fmt.Println("Fail in usage dnsdumpster.com")
+		cout <- fmt.Sprintf("Fail in usage dnsdumpster.com")
 		return
 	}
 
@@ -92,7 +151,7 @@ func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool) {
 	resp, httpErr = httpClient.Do(req)
 
 	if httpErr != nil {
-		fmt.Println("Fail in usage dnsdumpster.com")
+		cout <- fmt.Sprintf("Fail in usage dnsdumpster.com")
 		return
 	}
 
@@ -108,7 +167,7 @@ func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool) {
 	}
 }
 
-func findByWordList(wg *sync.WaitGroup, solved map[string]bool) {
+func findByWordList(wg *sync.WaitGroup, solved map[string]bool, settings *cliSettings) {
 	defer wg.Done()
 
 	file, err := os.Open(settings.WordlistFile)
@@ -137,16 +196,19 @@ func findByWordList(wg *sync.WaitGroup, solved map[string]bool) {
 	}
 }
 
-func parseFlags() {
+func parseFlags(settings *cliSettings) {
 	flag.StringVar(&settings.Domain, "d", "", "Set domain scan like '-d ya.ru'")
 	flag.StringVar(&settings.WordlistFile, "w", "wordlist.txt", "Set subdomains dictionary file like '-w wordlist.txt'")
 	flag.IntVar(&settings.Threads, "t", 10, "Set parallelism like '-t 50'")
+	flag.IntVar(&settings.WebPort, "ui", 0, "Enable user interface on port '-ui 8080'")
 
 	flag.Parse()
 
-	if settings.Domain == "" || settings.Domain == "site.ru" {
-		flag.Usage()
-		os.Exit(-1)
+	if settings.WebPort == 0 {
+		if settings.Domain == "" || settings.Domain == "site.ru" {
+			flag.Usage()
+			os.Exit(-1)
+		}
 	}
 
 	if settings.Threads <= 0 {
@@ -154,11 +216,6 @@ func parseFlags() {
 		flag.Usage()
 		os.Exit(-1)
 	}
-
-	fmt.Printf("Find subdomains for site:\t%s\r\n", settings.Domain)
-	fmt.Printf("Subdomains dictionary file:\t%s\r\n", settings.WordlistFile)
-	fmt.Printf("Threads:\t%d\r\n", settings.Threads)
-	fmt.Println()
 }
 
 var cnt int = 0
@@ -188,14 +245,7 @@ func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
 				var derr dnserr
 				json.Unmarshal(jerr, &derr)
 
-				// if jerr != nil && derr.Err == "dnsquery: DNS name does not exist." {
-				// 	return
-				// } else if jerr != nil && derr.Err == "dnsquery: This operation returned because the timeout period expired." {
-				// 	return
-				// } else {
-				// 	fmt.Printf("%s\t%s", cname, err)
 				continue
-				//}
 			}
 
 			cname = cname[0 : len(cname)-1]
@@ -207,7 +257,7 @@ func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
 				url := fmt.Sprintf("http://%s", dnsname)
 				req, herr := http.NewRequest("GET", url, nil)
 				if herr != nil {
-					fmt.Println(herr)
+					cout <- fmt.Sprint(herr)
 					continue
 				}
 
@@ -236,7 +286,7 @@ func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
 				}
 
 				if i == 0 {
-					fmt.Printf("%s\t%s\t%s\t%s\t\t%s\r\n", ip, respCode, linkType, dnsname, cname)
+					cout <- fmt.Sprintf("%s\t%s\t%s\t%s\t\t%s", ip, respCode, linkType, dnsname, cname)
 				}
 
 				if cname != "" {
@@ -246,5 +296,24 @@ func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
 				}
 			}
 		}
+	}
+}
+
+var upgrader = websocket.Upgrader{} // use default options
+
+func echo(w http.ResponseWriter, r *http.Request, zc <-chan string) {
+	c, err := upgrader.Upgrade(w, r, nil)
+
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+
+	defer c.Close()
+
+	for {
+		msg := <-zc
+
+		c.WriteMessage(1, []byte(msg))
 	}
 }

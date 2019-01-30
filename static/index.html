@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <style type="text/css">
+        *{
+            font-family:monospace;
+            font-size: 17px;
+        }
+        #log td {
+            padding-right: 14px;
+        }
+    </style>
+    <title>Domain scanner by SanSYS</title>
+    <script type='text/javascript'>
+        window.onload = function () {
+            var ws;
+
+            ws = new WebSocket("ws://" + location.host + "/echo");
+            ws.onopen = function(evt) {
+            }
+            ws.onclose = function(evt) {
+                ws = null;
+            }
+            ws.onmessage = function(evt) {
+                ProcessResponse(evt.data);
+            }
+            ws.onerror = function(evt) {
+            }
+
+            var log = document.getElementById('log');
+
+            function ProcessResponse(data) {
+                var tr = document.createElement('tr');
+
+                //tr.innerHTML = '<td>' + data.split('\t').join('</td><td>') + '</td>';
+                var cells = data.split('\t');
+                tr.innerHTML = 
+                    '<td>' + cells[0] + '</td>' +
+                    '<td>' + cells[1] + '</td>' +
+                    '<td>' + cells[2] + '</td>' +
+                    '<td><a href=http://' + cells[3] + '>' + cells[3] + '</a></td>' +
+                    '<td>' + cells[5] + '</td>'
+                    ;
+
+                log.appendChild(tr);
+            }
+        };
+
+        function scan(){
+            var domain = document.getElementById('domain');
+            var xhttp = new XMLHttpRequest();
+            xhttp.onreadystatechange = function() {
+                if (this.readyState == 4 && this.status == 200) {
+                    ;
+                }
+            };
+            xhttp.open("POST", "/scan?threads=10&domain=" + domain.value, true);
+            xhttp.send();
+        }
+    </script>
+</head>
+
+<body>
+    <input id="domain" type="text" autofocus>
+    <button onclick="scan()">find subdomains</button>
+
+    <table id="log"></table>
+</body>
+</html>
