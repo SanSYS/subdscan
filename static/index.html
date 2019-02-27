@@ -7,7 +7,7 @@
             font-family:monospace;
             font-size: 17px;
         }
-        #log td {
+        #domains td {
             padding-right: 14px;
         }
     </style>
@@ -28,22 +28,27 @@
             ws.onerror = function(evt) {
             }
 
+            var domains = document.getElementById('domains');
             var log = document.getElementById('log');
 
             function ProcessResponse(data) {
-                var tr = document.createElement('tr');
+                var d = JSON.parse(data);
 
-                //tr.innerHTML = '<td>' + data.split('\t').join('</td><td>') + '</td>';
-                var cells = data.split('\t');
-                tr.innerHTML = 
-                    '<td>' + cells[0] + '</td>' +
-                    '<td>' + cells[1] + '</td>' +
-                    '<td>' + cells[2] + '</td>' +
-                    '<td><a href=http://' + cells[3] + '>' + cells[3] + '</a></td>' +
-                    '<td>' + cells[5] + '</td>'
-                    ;
+                if (d.Type == "domain"){
+                    var tr = document.createElement('tr');
 
-                log.appendChild(tr);
+                    tr.innerHTML = 
+                        '<td>' + d.Result.Ip + '</td>' +
+                        '<td>' + d.Result.RespCode + '</td>' +
+                        '<td>' + d.Result.LinkType + '</td>' +
+                        '<td><a href=http://' + d.Result.Dnsname + '>' + d.Result.Dnsname + '</a></td>' +
+                        '<td>' + d.Result.Cname + '</td>'
+                        ;
+
+                    domains.appendChild(tr);
+                } else {
+                    log.innerHTML += data;
+                }
             }
         };
 
@@ -65,6 +70,7 @@
     <input id="domain" type="text" autofocus>
     <button onclick="scan()">find subdomains</button>
 
-    <table id="log"></table>
+    <textarea id="log" style="width:100%"></textarea>
+    <table id="domains"></table>
 </body>
 </html>

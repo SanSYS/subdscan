@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -29,16 +31,23 @@ type cliSettings struct {
 	WordlistFile string
 	Threads      int
 	WebPort      int
+	SyncId       string
+}
+
+type coutResult struct {
+	SyncId string
+	Type   string
+	Result interface{}
 }
 
 type semaphore chan bool
 
 var sem semaphore
 var dnsnames chan string
-var cout chan string
+var cout chan coutResult
 
 func main() {
-	cout = make(chan string)
+	cout = make(chan coutResult)
 
 	var settings cliSettings
 	parseFlags(&settings)
@@ -70,6 +79,7 @@ func main() {
 			scanSetting.Domain = req.FormValue("domain")
 			scanSetting.Threads, _ = strconv.Atoi(req.FormValue("threads"))
 			scanSetting.WordlistFile = settings.WordlistFile
+			scanSetting.SyncId = uuid()
 
 			go runScan(&scanSetting)
 		})
@@ -82,7 +92,7 @@ func main() {
 			for {
 				out := <-cout
 
-				if out == "out" {
+				if out.Result == "done" {
 					return
 				}
 
@@ -92,6 +102,16 @@ func main() {
 
 		runScan(&settings)
 	}
+}
+
+func uuid() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return fmt.Sprintf("%x-%x-%x-%x-%x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 func runScan(settings *cliSettings) {
@@ -110,7 +130,7 @@ func runScan(settings *cliSettings) {
 
 	wg.Wait()
 
-	cout <- "out"
+	cout <- coutResult{Type: "console", Result: "done", SyncId: settings.SyncId}
 }
 
 func printme() {
@@ -125,7 +145,7 @@ func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool, settings *cli
 	resp, httpErr := http.Get("https://dnsdumpster.com")
 
 	if httpErr != nil {
-		cout <- fmt.Sprintf("Fail in usage dnsdumpster.com")
+		cout <- coutResult{Type: "error", Result: fmt.Sprintf("Fail in usage dnsdumpster.com"), SyncId: settings.SyncId}
 		return
 	}
 
@@ -151,7 +171,7 @@ func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool, settings *cli
 	resp, httpErr = httpClient.Do(req)
 
 	if httpErr != nil {
-		cout <- fmt.Sprintf("Fail in usage dnsdumpster.com")
+		cout <- coutResult{Type: "error", Result: fmt.Sprintf("Fail in usage dnsdumpster.com"), SyncId: settings.SyncId}
 		return
 	}
 
@@ -178,7 +198,7 @@ func findByWordList(wg *sync.WaitGroup, solved map[string]bool, settings *cliSet
 
 	for i := 0; i < settings.Threads; i++ {
 		wg.Add(1)
-		go tryDns(wg, solved)
+		go tryDns(wg, solved, settings)
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -220,7 +240,7 @@ func parseFlags(settings *cliSettings) {
 
 var cnt int = 0
 
-func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
+func tryDns(wg *sync.WaitGroup, solved map[string]bool, settings *cliSettings) {
 	defer wg.Done()
 	for {
 		select {
@@ -253,26 +273,17 @@ func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
 			iprecords, err := net.LookupIP(dnsname)
 
 			for i, ip := range iprecords {
-				httpClient := &http.Client{Timeout: time.Second * 3}
-				url := fmt.Sprintf("http://%s", dnsname)
-				req, herr := http.NewRequest("GET", url, nil)
+				_, respCode, herr := getWebResponse(fmt.Sprintf("http://%s", dnsname), settings)
+
 				if herr != nil {
-					cout <- fmt.Sprint(herr)
-					continue
-				}
-
-				resp, httpErr := httpClient.Do(req)
-
-				var respCode string
-
-				if httpErr != nil {
-					if resp != nil {
-						respCode = strconv.Itoa(resp.StatusCode)
-					} else {
-						respCode = "?"
+					if herr.Error() != "exit" {
+						_, respCode, herr = getWebResponse(fmt.Sprintf("https://%s", dnsname), settings)
 					}
-				} else {
-					respCode = strconv.Itoa(resp.StatusCode)
+
+					if herr != nil && herr.Error() == "exit" {
+						cout <- coutResult{Type: "error", Result: fmt.Sprint(herr), SyncId: settings.SyncId}
+						continue
+					}
 				}
 
 				if dnsname == cname {
@@ -286,7 +297,15 @@ func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
 				}
 
 				if i == 0 {
-					cout <- fmt.Sprintf("%s\t%s\t%s\t%s\t\t%s", ip, respCode, linkType, dnsname, cname)
+					res := struct {
+						Ip       string
+						RespCode string
+						LinkType string
+						Dnsname  string
+						Cname    string
+					}{Ip: ip.String(), RespCode: respCode, LinkType: linkType, Dnsname: dnsname, Cname: cname}
+
+					cout <- coutResult{Type: "domain", Result: res, SyncId: settings.SyncId}
 				}
 
 				if cname != "" {
@@ -299,9 +318,37 @@ func tryDns(wg *sync.WaitGroup, solved map[string]bool) {
 	}
 }
 
+func getWebResponse(url string, settings *cliSettings) (string, string, error) {
+	httpClient := &http.Client{Timeout: time.Second * 3}
+
+	req, herr := http.NewRequest("GET", url, nil)
+	if herr != nil {
+		cout <- coutResult{Type: "error", Result: fmt.Sprint(herr), SyncId: settings.SyncId}
+
+		return "", "?", errors.New("exit")
+	}
+
+	resp, httpErr := httpClient.Do(req)
+
+	var respCode string
+
+	if httpErr != nil {
+		if resp != nil {
+			respCode = strconv.Itoa(resp.StatusCode)
+			return "", respCode, httpErr
+		}
+
+		return "", "?", httpErr
+	}
+
+	respCode = strconv.Itoa(resp.StatusCode)
+
+	return "", respCode, nil
+}
+
 var upgrader = websocket.Upgrader{} // use default options
 
-func echo(w http.ResponseWriter, r *http.Request, zc <-chan string) {
+func echo(w http.ResponseWriter, r *http.Request, zc <-chan coutResult) {
 	c, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
@@ -312,8 +359,9 @@ func echo(w http.ResponseWriter, r *http.Request, zc <-chan string) {
 	defer c.Close()
 
 	for {
-		msg := <-zc
+		res := <-zc
+		msg, _ := json.Marshal(res)
 
-		c.WriteMessage(1, []byte(msg))
+		c.WriteMessage(1, msg)
 	}
 }
