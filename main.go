@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	websocket "github.com/gorilla/websocket"
+	"github.com/gorilla/websocket"
 )
 
 type dnserr struct {
@@ -47,6 +47,9 @@ var dnsnames chan string
 var cout chan coutResult
 
 func main() {
+	// get hostname for run from ENV
+	serverHost := GetENV("SERVER_HOST", "127.0.0.1")
+
 	cout = make(chan coutResult)
 
 	var settings cliSettings
@@ -62,9 +65,6 @@ func main() {
 	fmt.Println("")
 
 	if settings.WebPort > 0 {
-		http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-			echo(w, r, cout)
-		})
 
 		http.Handle(
 			"/",
@@ -73,6 +73,10 @@ func main() {
 				http.FileServer(http.Dir("static")),
 			),
 		)
+
+		http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+			echo(w, r, cout)
+		})
 
 		http.HandleFunc("/scan", func(res http.ResponseWriter, req *http.Request) {
 			scanSetting := cliSettings{}
@@ -84,7 +88,7 @@ func main() {
 			go runScan(&scanSetting)
 		})
 
-		addr := flag.String("addr", "127.0.0.1:"+strconv.Itoa(settings.WebPort), "http service address")
+		addr := flag.String("addr", serverHost+":"+strconv.Itoa(settings.WebPort), "http service address")
 		fmt.Println("Runned Web UI on http://" + *addr)
 		log.Fatal(http.ListenAndServe(*addr, nil))
 	} else {
@@ -102,6 +106,16 @@ func main() {
 
 		runScan(&settings)
 	}
+}
+
+// GetENV get environment variable
+func GetENV(name string, defaultValue string) string {
+	val := os.Getenv(name)
+	if val == "" {
+		val = defaultValue
+	}
+
+	return val
 }
 
 func uuid() string {

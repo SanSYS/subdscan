@@ -19,6 +19,17 @@ Subdomain fast search tool
 ./subdscan -d somesite.ru
 ```
 
+### Run UI with Docker
+#### build
+```bash
+docker build -t subscan:latest .
+```
+
+#### run
+```bash
+docker run --rm -p 80:80 -e SERVER_HOST=0.0.0.0 subscan:latest
+```
+
 ![](example.png)
 
 ### run web ui
@@ -27,3 +38,5 @@ Subdomain fast search tool
 ```
 
 ![](example-webui.png)
+
+
