@@ -165,8 +165,18 @@ func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool, settings *cli
 
 	strResp, httpErr := ioutil.ReadAll(resp.Body)
 
+	if httpErr != nil {
+		cout <- coutResult{Type: "error", Result: fmt.Sprintf("Fail in usage dnsdumpster.com"), SyncId: settings.SyncId}
+		return
+	}
+
 	r := regexp.MustCompile("csrfmiddlewaretoken.+value='(.+)'")
 	match := r.FindAllString(string(strResp), 1)
+	if len(match) == 0 {
+		cout <- coutResult{Type: "error", Result: fmt.Sprintf("Fail in usage dnsdumpster.com"), SyncId: settings.SyncId}
+		return
+	}
+
 	csrf := match[0][29:60]
 
 	vals := make(url.Values)
