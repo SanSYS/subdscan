@@ -40,3 +40,5 @@ docker run --rm -p 80:80 -e SERVER_HOST=0.0.0.0 subscan:latest
 ![](example-webui.png)
 
 
+# Wordlist file
+You can find them in the internet, for example https://github.com/danielmiessler/SecLists/tree/master/Discovery/DNS
