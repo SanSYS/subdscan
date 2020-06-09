@@ -170,7 +170,7 @@ func findByDnsDumpster(wg *sync.WaitGroup, solved map[string]bool, settings *cli
 		return
 	}
 
-	r := regexp.MustCompile("csrfmiddlewaretoken.+value='(.+)'")
+	r := regexp.MustCompile("csrfmiddlewaretoken.+value=['\"](.+)['\"]")
 	match := r.FindAllString(string(strResp), 1)
 	if len(match) == 0 {
 		cout <- coutResult{Type: "error", Result: fmt.Sprintf("Fail in usage dnsdumpster.com"), SyncId: settings.SyncId}
